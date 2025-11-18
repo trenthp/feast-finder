@@ -7,7 +7,10 @@ const client = new Client({})
 
 export async function POST(request: NextRequest) {
   try {
-    const { lat, lng, radius = 5000, limit = 8 } = await request.json()
+    const { lat, lng, radius = 5000, limit = 8, filters } = await request.json()
+    const minRating = filters?.minRating || 0
+    const openNow = filters?.openNow || false
+    const maxReviews = filters?.maxReviews || 0
 
     // Check if API key is configured
     const apiKey = process.env.GOOGLE_MAPS_API_KEY
@@ -29,6 +32,7 @@ export async function POST(request: NextRequest) {
         radius,
         type: 'restaurant',
         key: apiKey,
+        ...(openNow && { opennow: true }),
       },
     })
 
@@ -43,7 +47,29 @@ export async function POST(request: NextRequest) {
     }
 
     // Transform Google Places results to our Restaurant type
-    const restaurants: Restaurant[] = response.data.results
+    let results = response.data.results
+
+    // Apply filters
+    if (minRating > 0) {
+      results = results.filter((place) => (place.rating || 0) >= minRating)
+    }
+
+    if (maxReviews > 0) {
+      results = results.filter((place) => {
+        const reviewCount = place.user_ratings_total || 0
+        // If maxReviews is 100, we want <= 100 (hidden gems)
+        // If maxReviews is 300, we want <= 300 (lesser-known)
+        // etc.
+        if (maxReviews === 100) return reviewCount <= 100
+        if (maxReviews === 300) return reviewCount <= 300
+        if (maxReviews === 500) return reviewCount <= 500
+        if (maxReviews === 1000) return reviewCount >= 1000
+        if (maxReviews === 5000) return reviewCount >= 5000
+        return true
+      })
+    }
+
+    const restaurants: Restaurant[] = results
       .slice(0, limit)
       .map((place, index) => {
         // Map price_level (0-4) to our display format

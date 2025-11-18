@@ -96,7 +96,13 @@ export async function fetchNearbyRestaurants(
   lat: number,
   lng: number,
   radius: number = 5000, // 5km default
-  limit: number = 8
+  limit: number = 8,
+  filters?: {
+    minRating: number
+    openNow: boolean
+    maxReviews: number
+    distance: number
+  }
 ): Promise<Restaurant[]> {
   // TODO: Replace with actual Google Maps API call
   // For now, return mock restaurants shuffled
@@ -104,7 +110,7 @@ export async function fetchNearbyRestaurants(
     const response = await fetch('/api/restaurants/nearby', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lat, lng, radius, limit }),
+      body: JSON.stringify({ lat, lng, radius, limit, filters }),
     })
 
     if (!response.ok) {

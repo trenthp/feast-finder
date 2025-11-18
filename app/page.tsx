@@ -8,7 +8,7 @@ export default function Home() {
 
   const startNewSession = () => {
     const newCode = Math.random().toString(36).substring(2, 8).toUpperCase()
-    window.location.href = `/session/${newCode}`
+    window.location.href = `/session/${newCode}/setup`
   }
 
   const joinSession = (e: React.FormEvent) => {
@@ -24,7 +24,7 @@ export default function Home() {
         <div className="text-center mb-12">
           <h1 className="text-5xl font-bold text-white mb-2">🍽️</h1>
           <h2 className="text-4xl font-bold text-white mb-2">Feast Finder</h2>
-          <p className="text-orange-100">Find your next favorite restaurant</p>
+          <p className="text-orange-100">Find your next favorite restaurant (or at least for tonight)</p>
         </div>
 
         <div className="space-y-4">

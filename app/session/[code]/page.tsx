@@ -64,14 +64,29 @@ export default function SessionPage() {
 
   const initializeRestaurants = async () => {
     try {
+      // Load filters from localStorage (set during session setup)
+      const storedFilters = localStorage.getItem(`filters-${sessionCode}`)
+      const filters = storedFilters
+        ? JSON.parse(storedFilters)
+        : { minRating: 0, openNow: false, maxReviews: 0, distance: 5 }
+
       const location = await getUserLocation()
       const defaultLocation = location || { lat: 40.7128, lng: -74.006 } // Default to NYC
+
+      if (location) {
+        console.log('Using user location:', location)
+      } else {
+        console.log('User location not available, using default NYC location')
+      }
+
+      console.log('Fetching restaurants with filters:', filters)
 
       const nearby = await fetchNearbyRestaurants(
         defaultLocation.lat,
         defaultLocation.lng,
-        5000,
-        10
+        filters.distance * 1000, // Convert km to meters
+        6,
+        filters
       )
 
       setRestaurants(nearby)
@@ -123,7 +138,7 @@ export default function SessionPage() {
 
   const handleNewSession = () => {
     const newCode = Math.random().toString(36).substring(2, 8).toUpperCase()
-    window.location.href = `/session/${newCode}`
+    window.location.href = `/session/${newCode}/setup`
   }
 
   if (loading) {
