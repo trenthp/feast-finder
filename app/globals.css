@@ -53,3 +53,23 @@ html, body {
 .swipe-left {
   animation: swipeLeft 0.3s ease-in forwards;
 }
+
+/* Winner bounce animation - bounces 3 times then stops */
+@keyframes bounceThrice {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  10%, 30%, 50% {
+    transform: translateY(-25px) scale(1);
+  }
+  20%, 40% {
+    transform: translateY(0) scale(1);
+  }
+  60% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+.bounce-winner {
+  animation: bounceThrice 1.5s ease-in-out forwards;
+}

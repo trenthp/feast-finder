@@ -147,7 +147,7 @@ export default function ResultsPage({
     <div className="min-h-screen bg-gradient-to-br from-orange-500 to-red-600 flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Winner Card */}
-        <div className="bg-white rounded-2xl shadow-2xl overflow-hidden mb-8 transform scale-100 animate-bounce">
+        <div className="bg-white rounded-2xl shadow-2xl overflow-hidden mb-8 transform scale-100 bounce-winner">
           {/* Image */}
           <div className="h-64 bg-gradient-to-br from-green-300 to-blue-400 flex items-center justify-center">
             <div className="text-8xl">🎊</div>

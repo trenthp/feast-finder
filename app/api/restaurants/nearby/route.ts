@@ -69,7 +69,10 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    const restaurants: Restaurant[] = results
+    // Shuffle results for variety in each session
+    const shuffled = results.sort(() => Math.random() - 0.5)
+
+    const restaurants: Restaurant[] = shuffled
       .slice(0, limit)
       .map((place, index) => {
         // Map price_level (0-4) to our display format
