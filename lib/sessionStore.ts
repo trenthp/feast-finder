@@ -1,17 +1,31 @@
-import { Session, Restaurant } from './types'
+import { Session, Restaurant, Filters } from './types'
 
 // In-memory store - in production, this would be a database
-const sessions: Map<string, Session> = new Map()
-const sessionRestaurants: Map<string, Restaurant[]> = new Map()
+// Use globalThis to persist across hot reloads in development
+const globalForSessions = globalThis as unknown as {
+  sessions: Map<string, Session> | undefined
+}
+
+const sessions: Map<string, Session> = globalForSessions.sessions ?? new Map()
+globalForSessions.sessions = sessions
 
 export const sessionStore = {
-  createSession: (code: string, userId: string): Session => {
+  createSession: (
+    code: string,
+    userId: string,
+    filters: Filters,
+    restaurants: Restaurant[],
+    location: { lat: number; lng: number }
+  ): Session => {
     const session: Session = {
       code,
       createdAt: Date.now(),
       users: [userId],
       votes: [],
       finished: false,
+      filters,
+      restaurants,
+      location,
     }
     sessions.set(code, session)
     return session
@@ -43,12 +57,25 @@ export const sessionStore = {
     session.votes.push({ userId, restaurantId, liked })
   },
 
-  setSessionRestaurants: (code: string, restaurants: Restaurant[]): void => {
-    sessionRestaurants.set(code, restaurants)
+  getUserVoteCount: (code: string, userId: string): number => {
+    const session = sessions.get(code)
+    if (!session) return 0
+    return session.votes.filter(v => v.userId === userId).length
   },
 
-  getSessionRestaurants: (code: string): Restaurant[] => {
-    return sessionRestaurants.get(code) || []
+  hasUserFinishedVoting: (code: string, userId: string): boolean => {
+    const session = sessions.get(code)
+    if (!session) return false
+    const userVotes = session.votes.filter(v => v.userId === userId)
+    return userVotes.length >= session.restaurants.length
+  },
+
+  allUsersFinished: (code: string): boolean => {
+    const session = sessions.get(code)
+    if (!session || session.users.length === 0) return false
+    return session.users.every(userId =>
+      sessionStore.hasUserFinishedVoting(code, userId)
+    )
   },
 
   finishSession: (code: string): void => {
@@ -58,7 +85,7 @@ export const sessionStore = {
     }
   },
 
-  calculateResults: (code: string, restaurants: Restaurant[]) => {
+  calculateResults: (code: string) => {
     const session = sessions.get(code)
     if (!session) return null
 
@@ -71,7 +98,7 @@ export const sessionStore = {
       }
     >()
 
-    restaurants.forEach((restaurant) => {
+    session.restaurants.forEach((restaurant) => {
       aggregated.set(restaurant.id, {
         restaurant,
         yesCount: 0,

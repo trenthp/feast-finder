@@ -25,78 +25,81 @@ export default function ResultsPage({
   const [winner, setWinner] = useState<Restaurant | null>(null)
   const [voteDetails, setVoteDetails] = useState<VoteCount[]>([])
   const [resultType, setResultType] = useState<string>('')
+  const [allFinished, setAllFinished] = useState(false)
+  const [loading, setLoading] = useState(true)
 
+  // Fetch results from API
   useEffect(() => {
-    // Load all votes from localStorage
-    const allUsers = new Set<string>()
-    const voteMap = new Map<string, { [key: string]: boolean }>()
+    const fetchResults = async () => {
+      try {
+        const response = await fetch(`/api/session/${sessionCode}/results`)
 
-    // Find all users by checking localStorage
-    const keys = Object.keys(localStorage)
-    keys.forEach((key) => {
-      if (key.startsWith(`votes-${sessionCode}-`)) {
-        const userIdMatch = key.replace(`votes-${sessionCode}-`, '')
-        allUsers.add(userIdMatch)
+        if (!response.ok) {
+          console.error('Failed to fetch results')
+          setLoading(false)
+          return
+        }
 
-        const votes = JSON.parse(localStorage.getItem(key) || '[]')
-        voteMap.set(userIdMatch, {})
+        const data = await response.json()
 
-        votes.forEach((vote: { restaurantId: string; liked: boolean }) => {
-          voteMap.get(userIdMatch)![vote.restaurantId] = vote.liked
-        })
-      }
-    })
+        if (data.results) {
+          const { type, restaurant, allVotes, yesCount, userCount } = data.results
 
-    // Calculate vote counts
-    const counts: VoteCount[] = restaurants.map((restaurant) => {
-      let yesCount = 0
-      const votes: { [key: string]: boolean } = {}
+          // Set winner
+          setWinner(restaurant)
 
-      allUsers.forEach((user) => {
-        const userVotes = voteMap.get(user) || {}
-        if (restaurant.id in userVotes) {
-          votes[user] = userVotes[restaurant.id]
-          if (userVotes[restaurant.id]) {
-            yesCount++
+          // Set result type
+          if (type === 'full-agreement') {
+            setResultType('unanimous')
+          } else if (type === 'best-match') {
+            setResultType(yesCount === userCount ? 'majority' : 'best-match')
+          }
+
+          // Transform allVotes to VoteCount format
+          if (allVotes) {
+            const voteCounts: VoteCount[] = allVotes.map((vote: any) => ({
+              restaurantId: vote.restaurant.id,
+              restaurant: vote.restaurant,
+              yesCount: vote.yesCount,
+              noCount: userCount - vote.yesCount,
+              votes: vote.userVotes,
+            }))
+            setVoteDetails(voteCounts)
           }
         }
-      })
 
-      return {
-        restaurantId: restaurant.id,
-        restaurant,
-        yesCount,
-        noCount: allUsers.size - yesCount,
-        votes,
+        setLoading(false)
+      } catch (err) {
+        console.error('Error fetching results:', err)
+        setLoading(false)
       }
-    })
-
-    setVoteDetails(counts)
-
-    // Determine winner based on the voting logic
-    const userCount = allUsers.size
-
-    // 1. Check for unanimous agreement
-    const unanimous = counts.find(
-      (count) =>
-        count.yesCount === userCount &&
-        Object.keys(count.votes).length === userCount
-    )
-
-    if (unanimous) {
-      setWinner(unanimous.restaurant)
-      setResultType('unanimous')
-      return
     }
 
-    // 2. Find highest voted restaurant
-    const sorted = counts.filter((c) => c.yesCount > 0).sort((a, b) => b.yesCount - a.yesCount)
+    fetchResults()
+  }, [sessionCode])
 
-    if (sorted.length > 0) {
-      setWinner(sorted[0].restaurant)
-      setResultType(sorted[0].yesCount === userCount ? 'majority' : 'best-match')
+  // Poll to check if all users finished
+  useEffect(() => {
+    const pollStatus = async () => {
+      try {
+        const response = await fetch(`/api/session/${sessionCode}/status`)
+        if (response.ok) {
+          const data = await response.json()
+          setAllFinished(data.allFinished)
+        }
+      } catch (err) {
+        console.error('Error polling status:', err)
+      }
     }
-  }, [sessionCode, restaurants])
+
+    // Poll immediately
+    pollStatus()
+
+    // Poll every 3 seconds
+    const interval = setInterval(pollStatus, 3000)
+
+    return () => clearInterval(interval)
+  }, [sessionCode])
 
   const resultMessage =
     resultType === 'unanimous'
@@ -104,6 +107,41 @@ export default function ResultsPage({
       : resultType === 'majority'
         ? "Majority match! 🥳"
         : "Best match found! 👌"
+
+  // Show waiting state if not everyone finished
+  if (!allFinished) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-orange-500 to-red-600 flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-md text-center">
+          <div className="bg-white bg-opacity-20 backdrop-blur rounded-2xl p-8">
+            <div className="text-6xl mb-6 animate-bounce">⏳</div>
+            <h2 className="text-3xl font-bold text-white mb-4">
+              Waiting for others...
+            </h2>
+            <p className="text-orange-100 text-lg">
+              You've finished voting! Waiting for the rest of your group to complete their selections.
+            </p>
+            <div className="mt-6 flex items-center justify-center gap-2">
+              <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
+              <div className="w-3 h-3 bg-white rounded-full animate-pulse delay-100"></div>
+              <div className="w-3 h-3 bg-white rounded-full animate-pulse delay-200"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (loading || !winner) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center p-4">
+        <div className="text-center">
+          <div className="text-4xl mb-4">🍽️</div>
+          <p className="text-white text-lg">Calculating results...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-500 to-red-600 flex flex-col items-center justify-center p-4">

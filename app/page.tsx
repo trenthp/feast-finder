@@ -8,6 +8,7 @@ export default function Home() {
 
   const startNewSession = () => {
     const newCode = Math.random().toString(36).substring(2, 8).toUpperCase()
+    console.log('🏠 HOME: Navigating to:', `/session/${newCode}/setup`)
     window.location.href = `/session/${newCode}/setup`
   }
 

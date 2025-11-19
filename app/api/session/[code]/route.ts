@@ -1,0 +1,51 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { sessionStore } from '@/lib/sessionStore'
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ code: string }> }
+) {
+  try {
+    const { code } = await params
+    const { searchParams } = new URL(request.url)
+    const userId = searchParams.get('userId')
+
+    console.log('[API] GET /api/session/' + code, '(userId:', userId + ')')
+
+    const session = sessionStore.getSession(code)
+
+    if (!session) {
+      console.error('[API] Session not found:', code)
+      return NextResponse.json(
+        { error: 'Session not found' },
+        { status: 404 }
+      )
+    }
+
+    console.log('[API] Session found:', code, 'with', session.restaurants.length, 'restaurants')
+
+    // Add user to session if userId provided and not already in
+    if (userId) {
+      sessionStore.addUserToSession(code, userId)
+    }
+
+    return NextResponse.json({
+      success: true,
+      session: {
+        code: session.code,
+        createdAt: session.createdAt,
+        users: session.users,
+        filters: session.filters,
+        restaurants: session.restaurants,
+        location: session.location,
+        finished: session.finished,
+      },
+    })
+  } catch (error) {
+    console.error('Error fetching session:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}

@@ -1,127 +1,129 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { useParams } from 'next/navigation'
-import { Restaurant, Session } from '@/lib/types'
-import { fetchNearbyRestaurants, getUserLocation } from '@/lib/googleMaps'
+import { useParams, useRouter } from 'next/navigation'
+import { Restaurant } from '@/lib/types'
 import RestaurantCard from '@/components/RestaurantCard'
 import ResultsPage from '@/components/ResultsPage'
 import ShareCode from '@/components/ShareCode'
 
 export default function SessionPage() {
   const params = useParams()
+  const router = useRouter()
   const sessionCode = params.code as string
 
   const [userId, setUserId] = useState<string>('')
   const [restaurants, setRestaurants] = useState<Restaurant[]>([])
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [_session, _setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
   const [showingResults, setShowingResults] = useState(false)
-  const [votes, setVotes] = useState<{ restaurantId: string; liked: boolean }[]>([])
+  const [error, setError] = useState<string | null>(null)
 
-  // Initialize user and session
+  // Initialize user and fetch session
   useEffect(() => {
-    const storedUserId = localStorage.getItem(`user-${sessionCode}`)
-    const newUserId = storedUserId || `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    const initSession = async () => {
+      try {
+        // Get or create user ID
+        const storedUserId = localStorage.getItem(`user-${sessionCode}`)
+        const newUserId = storedUserId || `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 
-    if (!storedUserId) {
-      localStorage.setItem(`user-${sessionCode}`, newUserId)
-    }
+        if (!storedUserId) {
+          localStorage.setItem(`user-${sessionCode}`, newUserId)
+        }
 
-    setUserId(newUserId)
+        setUserId(newUserId)
 
-    // Load session data
-    const sessionKey = `session-${sessionCode}`
-    const storedSession = localStorage.getItem(sessionKey)
+        // Fetch session data from API
+        console.log('Fetching session:', sessionCode, 'for user:', newUserId)
 
-    if (storedSession) {
-      _setSession(JSON.parse(storedSession))
-    } else {
-      const newSession: Session = {
-        code: sessionCode,
-        createdAt: Date.now(),
-        users: [newUserId],
-        votes: [],
-        finished: false,
+        const response = await fetch(`/api/session/${sessionCode}?userId=${newUserId}`)
+
+        console.log('Fetch session response status:', response.status)
+
+        if (!response.ok) {
+          if (response.status === 404) {
+            console.error('Session not found:', sessionCode)
+            setError('Session not found. The host needs to complete the setup first.')
+            setLoading(false)
+            return
+          }
+          throw new Error('Failed to fetch session')
+        }
+
+        const data = await response.json()
+        console.log('Session data loaded:', data)
+        setRestaurants(data.session.restaurants)
+        setLoading(false)
+      } catch (err) {
+        console.error('Error initializing session:', err)
+        setError('Failed to load session. Please try again.')
+        setLoading(false)
       }
-      _setSession(newSession)
-      localStorage.setItem(sessionKey, JSON.stringify(newSession))
     }
 
-    // Load restaurants for this session
-    const restaurantsKey = `restaurants-${sessionCode}`
-    const storedRestaurants = localStorage.getItem(restaurantsKey)
-
-    if (storedRestaurants) {
-      setRestaurants(JSON.parse(storedRestaurants))
-      setLoading(false)
-    } else {
-      // Fetch nearby restaurants
-      initializeRestaurants()
-    }
+    initSession()
   }, [sessionCode])
 
-  const initializeRestaurants = async () => {
-    try {
-      // Load filters from localStorage (set during session setup)
-      const storedFilters = localStorage.getItem(`filters-${sessionCode}`)
-      const filters = storedFilters
-        ? JSON.parse(storedFilters)
-        : { minRating: 0, openNow: false, maxReviews: 0, distance: 5 }
+  // Poll for session status when showing results
+  useEffect(() => {
+    if (!showingResults || !userId) return
 
-      const location = await getUserLocation()
-      const defaultLocation = location || { lat: 40.7128, lng: -74.006 } // Default to NYC
-
-      if (location) {
-        console.log('Using user location:', location)
-      } else {
-        console.log('User location not available, using default NYC location')
+    const pollStatus = async () => {
+      try {
+        const response = await fetch(`/api/session/${sessionCode}/status?userId=${userId}`)
+        if (response.ok) {
+          const data = await response.json()
+          // Keep polling - results page will handle showing matches
+          console.log('Session status:', data)
+        }
+      } catch (err) {
+        console.error('Error polling status:', err)
       }
-
-      console.log('Fetching restaurants with filters:', filters)
-
-      const nearby = await fetchNearbyRestaurants(
-        defaultLocation.lat,
-        defaultLocation.lng,
-        filters.distance * 1000, // Convert km to meters
-        6,
-        filters
-      )
-
-      setRestaurants(nearby)
-      localStorage.setItem(`restaurants-${sessionCode}`, JSON.stringify(nearby))
-    } catch (error) {
-      console.error('Error initializing restaurants:', error)
-    } finally {
-      setLoading(false)
     }
-  }
+
+    // Poll immediately
+    pollStatus()
+
+    // Poll every 3 seconds
+    const interval = setInterval(pollStatus, 3000)
+
+    return () => clearInterval(interval)
+  }, [showingResults, sessionCode, userId])
 
   const handleVote = useCallback(
-    (restaurantId: string, liked: boolean) => {
-      const newVotes = [...votes]
-      const existingIndex = newVotes.findIndex((v) => v.restaurantId === restaurantId)
+    async (restaurantId: string, liked: boolean) => {
+      try {
+        // Send vote to API
+        const response = await fetch(`/api/session/${sessionCode}/vote`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, restaurantId, liked }),
+        })
 
-      if (existingIndex >= 0) {
-        newVotes[existingIndex] = { restaurantId, liked }
-      } else {
-        newVotes.push({ restaurantId, liked })
-      }
+        if (!response.ok) {
+          throw new Error('Failed to save vote')
+        }
 
-      setVotes(newVotes)
+        const data = await response.json()
 
-      // Save votes to localStorage
-      localStorage.setItem(`votes-${sessionCode}-${userId}`, JSON.stringify(newVotes))
-
-      // Move to next restaurant
-      if (currentIndex < restaurants.length - 1) {
-        setCurrentIndex(currentIndex + 1)
-      } else {
-        setShowingResults(true)
+        // Move to next restaurant or show results
+        if (currentIndex < restaurants.length - 1) {
+          setCurrentIndex(currentIndex + 1)
+        } else {
+          // User finished voting
+          setShowingResults(true)
+        }
+      } catch (err) {
+        console.error('Error saving vote:', err)
+        // Still move to next restaurant even if vote fails
+        if (currentIndex < restaurants.length - 1) {
+          setCurrentIndex(currentIndex + 1)
+        } else {
+          setShowingResults(true)
+        }
       }
     },
-    [currentIndex, restaurants.length, sessionCode, userId, votes]
+    [currentIndex, restaurants.length, sessionCode, userId]
   )
 
   const handleYes = () => {
@@ -146,7 +148,24 @@ export default function SessionPage() {
       <div className="min-h-screen bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center p-4">
         <div className="text-center">
           <div className="text-4xl mb-4">🍽️</div>
-          <p className="text-white text-lg">Finding restaurants near you...</p>
+          <p className="text-white text-lg">Loading session...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center p-4">
+        <div className="text-center max-w-md">
+          <div className="text-4xl mb-4">⚠️</div>
+          <p className="text-white text-lg mb-4">{error}</p>
+          <button
+            onClick={() => router.push('/')}
+            className="bg-white text-orange-600 font-bold py-3 px-6 rounded-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition"
+          >
+            Go Home
+          </button>
         </div>
       </div>
     )

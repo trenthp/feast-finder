@@ -19,12 +19,22 @@ export interface Vote {
   liked: boolean
 }
 
+export interface Filters {
+  minRating: number
+  openNow: boolean
+  maxReviews: number
+  distance: number
+}
+
 export interface Session {
   code: string
   createdAt: number
   users: string[]
   votes: Vote[]
   finished: boolean
+  filters: Filters
+  restaurants: Restaurant[]
+  location: { lat: number; lng: number }
 }
 
 export interface AggregatedVote {
